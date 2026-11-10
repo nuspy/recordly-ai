@@ -218,6 +218,8 @@ interface RendererExportHardwareInfo {
 
 interface Window {
 	electronAPI: {
+		automation: import("./automation/preloadApi").AutomationPreloadApi;
+		stt?: import("./automation/stt/types").SttPreloadApi;
 		hudOverlaySetIgnoreMouse: (ignore: boolean) => void;
 		hudOverlaySetSourceSelectionActive: (active: boolean) => void;
 		hudOverlayDrag: (phase: "start" | "move" | "end", screenX: number, screenY: number) => void;
@@ -720,13 +722,15 @@ interface Window {
 		generateAutoCaptions: (options: {
 			videoPath: string;
 			whisperExecutablePath?: string;
-			whisperModelPath: string;
+			whisperModelPath: string | null;
 			language?: string;
 		}) => Promise<{
 			success: boolean;
 			cues?: AutoCaptionCue[];
 			message?: string;
 			error?: string;
+			backend?: "bridge" | "local";
+			fallbackToLocal?: boolean;
 		}>;
 		setCurrentVideoPath: (
 			path: string,

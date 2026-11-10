@@ -1,0 +1,25 @@
+# Terminal tool demo: visible typing, wait for the output to settle after each command.
+title: "CLI demo"
+language: en
+target:
+  launch: "start wt -d ."
+  settle_ms: 2500
+  window: { title: "REPLACE terminal title regex" }
+recorder: { countdown: 0, auto_edit: { speed_up_idle: true, target_seconds: 3 } }
+tts: { provider: edge, voice: en-US-GuyNeural, lang: en }
+steps:
+  - id: install
+    chapter: "Install"
+    narration: "REPLACE"
+    narration_timing: with
+    actions:
+      - { type: type, text: "REPLACE command\n", interval_ms: 45 }
+    wait: { type: stable, for_ms: 2000, timeout_s: 120 }
+  - id: run
+    chapter: "Run"
+    narration: "REPLACE"
+    narration_timing: with
+    actions:
+      - { type: type, text: "REPLACE command\n", interval_ms: 45 }
+    wait: { type: stable, for_ms: 2000, timeout_s: 300 }
+output: { project_name: "CLI demo", video: "REPLACE.mp4", quality: high, subtitles: true }

@@ -9,6 +9,14 @@ Language: EN | [简中](README.zh-CN.md)
   <img src="https://img.shields.io/badge/open%20source-AGPL3.0-2563eb?style=for-the-badge" alt="AGPL 3.0 license" />
 </p>
 
+> **Recordly AI** — this fork adds a local REST API, a headless `--server` mode, live
+> subtitles/narration from AI agents, automatic speed-up of idle waits (AI generations) and an
+> agent skill for Claude Code, Codex, Gemini CLI and Hermes. See [docs/recordly-ai.md](docs/recordly-ai.md)
+> and [skills/recordly-ai-demo](skills/recordly-ai-demo/SKILL.md).
+>
+> This repository is a fork of [webadderallorg/Recordly](https://github.com/webadderallorg/Recordly) under the same AGPL-3.0
+> licence. `main` follows the upstream project; `master` carries the fork's changes.
+
 ### Create polished demo videos in minutes
 [Recordly](https://www.recordly.dev) is your **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
 **Accepting PRs.**

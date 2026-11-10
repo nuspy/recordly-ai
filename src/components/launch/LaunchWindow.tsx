@@ -17,6 +17,7 @@ import { useEffect, useRef } from "react";
 import { Separator } from "@/components/ui/separator";
 import { useScopedT } from "../../contexts/I18nContext";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
+import { useHudAutomation } from "../../automation/hud/useHudAutomation";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import { useVideoDevices } from "../../hooks/useVideoDevices";
 import { Button } from "../ui/button";
@@ -55,6 +56,8 @@ function LaunchWindowContent() {
 	const t = useScopedT("launch");
 	const { openId, requestOpen } = useLaunchPopoverCoordinator();
 
+	const recorder = useScreenRecorder();
+	useHudAutomation(recorder);
 	const {
 		recording,
 		paused,
@@ -77,7 +80,7 @@ function LaunchWindowContent() {
 		countdownDelay,
 		setCountdownDelay,
 		preparePermissions,
-	} = useScreenRecorder();
+	} = recorder;
 
 	const { elapsed, formatTime } = useRecordingTimer(recording, paused);
 	const hudContentRef = useRef<HTMLDivElement>(null);

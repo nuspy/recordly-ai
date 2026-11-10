@@ -1,5 +1,6 @@
 /* biome-ignore-all lint/correctness/useExhaustiveDependencies: setters returned by the editor's domain-state hooks are stable React dispatchers. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEditorAutomation } from "@/automation/editor/useEditorAutomation";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { getAspectRatioValue } from "@/utils/aspectRatioUtils";
@@ -342,6 +343,19 @@ export default function VideoEditor() {
 		experimentalNvidiaCudaExport,
 		nvidiaCudaExportAvailable,
 		remountPreview,
+	});
+	useEditorAutomation({
+		project,
+		timeline,
+		presets,
+		projectController,
+		exportController,
+		exportSettings,
+		exportSession,
+		durationSeconds: duration,
+		isPreviewReady,
+		isGeneratingCaptions,
+		nextAnnotationZIndexRef,
 	});
 	const previewAspectRatioValue = getAspectRatioValue(
 		aspectRatio,

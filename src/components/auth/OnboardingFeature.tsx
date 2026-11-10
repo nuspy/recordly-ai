@@ -43,7 +43,7 @@ function FeatureIllustration({ step }: { step: number }) {
 						<span key={i} className="size-2 rounded-full bg-zinc-300" />
 					))}
 					<span className="ml-3 text-xs font-medium">
-						{features[step].name === "Share" ? "Your recording" : "Recordly"}
+						{features[step].name === "Share" ? "Your recording" : "Recordly AI"}
 					</span>
 				</div>
 				<div className="relative mx-5 mb-5 mt-4 flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-indigo-200 via-sky-100 to-rose-200">

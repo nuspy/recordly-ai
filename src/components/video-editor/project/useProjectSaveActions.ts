@@ -368,6 +368,7 @@ export function useProjectSaveActions({
 
 	return {
 		saveProject,
+		saveProjectWithName,
 		handleSaveProject,
 		handleSaveProjectAs,
 		handleProjectSaveDialogSubmit,

@@ -149,6 +149,12 @@ type UseScreenRecorderReturn = {
 	setWebcamDeviceId: (deviceId: string | undefined) => void;
 	countdownDelay: number;
 	setCountdownDelay: (delay: number) => void;
+	starting: boolean;
+	getRecordingClockSnapshot: () => {
+		startTimeMs: number;
+		accumulatedPausedMs: number;
+		pauseStartedAtMs: number | null;
+	};
 };
 
 function getErrorMessage(error: unknown) {
@@ -520,6 +526,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		});
 	}, []);
 
+	const getRecordingClockSnapshot = useCallback(
+		() => ({
+			startTimeMs: startTime.current,
+			accumulatedPausedMs: accumulatedPausedDurationMs.current,
+			pauseStartedAtMs: pauseStartedAtMs.current,
+		}),
+		[],
+	);
+
 	const getMicFallbackRecordedElapsedMs = useCallback((now = performance.now()) => {
 		const startedAt = micFallbackRecorderStartedAt.current;
 		if (startedAt === null) {
@@ -557,8 +572,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			await window.electronAPI.openScreenRecordingPreferences();
 			alert(
 				options.startup
-					? "Recordly needs Screen Recording permission before you start. System Settings has been opened. After enabling it, quit and reopen Recordly."
-					: "Screen Recording permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
+					? "Recordly AI needs Screen Recording permission before you start. System Settings has been opened. After enabling it, quit and reopen Recordly AI."
+					: "Screen Recording permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly AI before recording.",
 			);
 			return false;
 		}
@@ -580,8 +595,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		await window.electronAPI.openAccessibilityPreferences();
 		alert(
 			options.startup
-				? "Recordly also needs Accessibility permission for cursor tracking. System Settings has been opened. After enabling it, quit and reopen Recordly."
-				: "Accessibility permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
+				? "Recordly AI also needs Accessibility permission for cursor tracking. System Settings has been opened. After enabling it, quit and reopen Recordly AI."
+				: "Accessibility permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly AI before recording.",
 		);
 
 		return false;
@@ -2457,5 +2472,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamDeviceId: persistWebcamDeviceId,
 		countdownDelay,
 		setCountdownDelay,
+		starting,
+		getRecordingClockSnapshot,
 	};
 }

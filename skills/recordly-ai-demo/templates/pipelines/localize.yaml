@@ -1,0 +1,18 @@
+# Localized set: run this script once per language (copy and change language/voice/narration),
+# keeping the same step ids so chapters line up across versions.
+title: "Localized demo"
+language: en                      # it | en | fr | es | de ...
+target:
+  window: { title: "REPLACE" }
+recorder: { countdown: 0, auto_edit: { speed_up_idle: true, target_seconds: 8 } }
+tts: { provider: edge, voice: en-US-AriaNeural, lang: en }
+steps:
+  - id: intro
+    chapter: "Intro"
+    narration: "REPLACE (same meaning in every language)"
+  - id: main
+    chapter: "REPLACE"
+    narration: "REPLACE"
+    actions: []
+    wait: { type: stable, for_ms: 1000, timeout_s: 20 }
+output: { project_name: "Demo EN", video: "REPLACE-en.mp4", quality: high, subtitles: true }

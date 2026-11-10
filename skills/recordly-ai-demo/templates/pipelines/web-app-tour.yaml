@@ -1,0 +1,24 @@
+# Web app walkthrough in a headed browser window; zoom on every important control.
+title: "Web app tour"
+language: en
+target:
+  launch: "start msedge --new-window REPLACE-URL"
+  settle_ms: 5000
+  window: { title: "REPLACE page title regex" }
+recorder: { countdown: 0, auto_edit: { speed_up_idle: true, target_seconds: 4 } }
+tts: { provider: edge, voice: en-US-AriaNeural, lang: en }
+steps:
+  - id: home
+    chapter: "Overview"
+    narration: "REPLACE"
+    wait: { type: stable, for_ms: 1500, timeout_s: 20 }
+  - id: feature-1
+    chapter: "REPLACE feature"
+    narration: "REPLACE"
+    narration_timing: with
+    actions:
+      - { type: click, uia: { window: "REPLACE", name: "REPLACE", control_type: "Hyperlink" }, zoom: true }
+    wait: { type: stable, for_ms: 1500, timeout_s: 20 }
+  - id: outro
+    narration: "REPLACE"
+output: { project_name: "Web tour", video: "REPLACE.mp4", quality: high, subtitles: true }

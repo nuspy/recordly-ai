@@ -4,6 +4,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { app } from "electron";
+import type { SttJobPlan } from "../../automation/stt/backend";
+import { transcribeCaptionAudio } from "../../automation/stt/captionTranscription";
+import { filterHallucinatedCues } from "../../automation/stt/hallucinations";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import { getBundledWhisperExecutableCandidates } from "../paths/binaries";
 import { resolveRecordingSession } from "../project/session";
@@ -29,16 +32,21 @@ const execFileAsync = promisify(execFile);
 
 class NoCaptionAudioError extends Error {}
 
-async function executeWhisper(whisperExecutablePath: string, args: string[]) {
+async function executeWhisper(
+	whisperExecutablePath: string,
+	args: string[],
+	env?: Record<string, string>,
+) {
 	try {
 		await execFileAsync(whisperExecutablePath, args, {
 			timeout: 30 * 60 * 1000,
 			maxBuffer: 20 * 1024 * 1024,
+			...(env && Object.keys(env).length > 0 ? { env: { ...process.env, ...env } } : {}),
 		});
 	} catch (error) {
 		if (isMissingWindowsWhisperRuntimeDependency(error)) {
 			throw new Error(
-				"Whisper could not start because the Microsoft Visual C++ x64 Redistributable is missing. Install it from https://aka.ms/vc14/vc_redist.x64.exe, then restart Recordly.",
+				"Whisper could not start because the Microsoft Visual C++ x64 Redistributable is missing. Install it from https://aka.ms/vc14/vc_redist.x64.exe, then restart Recordly AI.",
 			);
 		}
 		throw error;
@@ -105,7 +113,7 @@ export async function resolveWhisperExecutablePath(preferredPath?: string | null
 
 	throw new Error(
 		`No Whisper runtime was found for ${process.platform}/${process.arch}. ` +
-			"This Recordly build is missing its bundled caption runtime. Reinstall or update Recordly, or select a whisper-cli executable in Caption settings.",
+			"This Recordly AI build is missing its bundled caption runtime. Reinstall or update Recordly AI, or select a whisper-cli executable in Caption settings.",
 	);
 }
 
@@ -229,12 +237,75 @@ export async function detectSilenceIntervals(options: {
 	return parseSilenceIntervals(stderr ?? "");
 }
 
+async function runWhisperCpp(options: {
+	whisperExecutablePath: string;
+	whisperModelPath: string;
+	wavPath: string;
+	outputBase: string;
+	language: string;
+	/** Extra environment (CUDA GPU selection); only passed for the CUDA runtime. */
+	env?: Record<string, string>;
+}) {
+	const whisperBaseArgs = [
+		"-m",
+		options.whisperModelPath,
+		"-f",
+		options.wavPath,
+		"-osrt",
+		"-of",
+		options.outputBase,
+		"-l",
+		options.language,
+		"-np",
+		// Do not carry a hallucinated phrase through later decoding windows.
+		"-mc",
+		"0",
+	];
+
+	let jsonEnabled = true;
+	try {
+		await executeWhisper(
+			options.whisperExecutablePath,
+			[...whisperBaseArgs, "-ojf"],
+			options.env,
+		);
+	} catch (error) {
+		if (!shouldRetryWhisperWithoutJson(error)) {
+			throw error;
+		}
+
+		jsonEnabled = false;
+		console.warn(
+			"[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:",
+			error,
+		);
+		await executeWhisper(options.whisperExecutablePath, whisperBaseArgs, options.env);
+	}
+
+	return readWhisperCaptionOutput(options.outputBase, jsonEnabled);
+}
+
+async function resolveLocalWhisperInputs(options: {
+	whisperExecutablePath?: string;
+	whisperModelPath?: string | null;
+}) {
+	if (!options.whisperModelPath?.trim()) {
+		throw new Error("Select a Whisper model or download one in Caption settings first.");
+	}
+	const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath);
+	const whisperModelPath = path.resolve(options.whisperModelPath);
+	await ensureReadableFile(whisperExecutablePath, { executable: true });
+	await ensureReadableFile(whisperModelPath);
+	return { whisperExecutablePath, whisperModelPath };
+}
+
 async function generateCaptionsForSource(options: {
 	videoPath: string;
 	whisperExecutablePath?: string;
-	whisperModelPath: string;
+	whisperModelPath?: string | null;
 	language?: string;
 	candidates: CaptionAudioCandidate[];
+	stt?: SttJobPlan;
 }) {
 	const ffmpegPath = getFfmpegBinaryPath();
 	const normalizedVideoPath = normalizeVideoSourcePath(options.videoPath);
@@ -242,10 +313,9 @@ async function generateCaptionsForSource(options: {
 		throw new Error("Missing source video path.");
 	}
 
-	const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath);
-	const whisperModelPath = path.resolve(options.whisperModelPath);
-	await ensureReadableFile(whisperExecutablePath, { executable: true });
-	await ensureReadableFile(whisperModelPath);
+	// The bridge needs no local runtime; whisper.cpp inputs are checked lazily on fallback.
+	let localInputs =
+		options.stt?.backend === "bridge" ? null : await resolveLocalWhisperInputs(options);
 
 	const tempBase = path.join(
 		app.getPath("temp"),
@@ -266,39 +336,68 @@ async function generateCaptionsForSource(options: {
 
 		const language =
 			options.language && options.language.trim() ? options.language.trim() : "auto";
-		const whisperBaseArgs = [
-			"-m",
-			whisperModelPath,
-			"-f",
-			wavPath,
-			"-osrt",
-			"-of",
-			outputBase,
-			"-l",
-			language,
-			"-np",
-			// Do not carry a hallucinated phrase through later decoding windows.
-			"-mc",
-			"0",
-		];
 
-		let jsonEnabled = true;
-		try {
-			await executeWhisper(whisperExecutablePath, [...whisperBaseArgs, "-ojf"]);
-		} catch (error) {
-			if (!shouldRetryWhisperWithoutJson(error)) {
-				throw error;
+		// Silence detection is optional: a failure keeps the raw cues (and plain hard cuts
+		// for bridge segments).
+		let silencesPromise: Promise<SilenceInterval[] | null> | null = null;
+		const getSilences = () => {
+			silencesPromise ??= detectSilenceIntervals({ ffmpegPath, wavPath }).catch((error) => {
+				console.warn("[auto-captions] Silence detection failed:", error);
+				return null;
+			});
+			return silencesPromise;
+		};
+
+		const transcribeLocal = async (sourceWavPath: string) => {
+			localInputs ??= await resolveLocalWhisperInputs(options);
+			const inputs = localInputs;
+			const sourceOutputBase =
+				sourceWavPath === wavPath
+					? outputBase
+					: `${sourceWavPath.replace(/\.wav$/i, "")}-whisper`;
+			const run = (whisperExecutablePath: string, env?: Record<string, string>) =>
+				runWhisperCpp({
+					whisperExecutablePath,
+					whisperModelPath: inputs.whisperModelPath,
+					wavPath: sourceWavPath,
+					outputBase: sourceOutputBase,
+					language,
+					env,
+				});
+			try {
+				const cudaExecutablePath = options.whisperExecutablePath?.trim()
+					? null
+					: options.stt?.cudaExecutablePath;
+				if (cudaExecutablePath) {
+					try {
+						return await run(cudaExecutablePath, options.stt?.cudaEnv);
+					} catch (error) {
+						console.warn(
+							"[auto-captions] CUDA Whisper runtime failed, retrying on CPU:",
+							error,
+						);
+						await options.stt?.onCudaFailure?.(error);
+					}
+				}
+				return await run(inputs.whisperExecutablePath);
+			} finally {
+				if (sourceOutputBase !== outputBase) {
+					await Promise.allSettled([
+						fs.rm(`${sourceOutputBase}.srt`, { force: true }),
+						fs.rm(`${sourceOutputBase}.json`, { force: true }),
+					]);
+				}
 			}
+		};
 
-			jsonEnabled = false;
-			console.warn(
-				"[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:",
-				error,
-			);
-			await executeWhisper(whisperExecutablePath, whisperBaseArgs);
-		}
-
-		const cues = await readWhisperCaptionOutput(outputBase, jsonEnabled);
+		const transcription = await transcribeCaptionAudio({
+			wavPath,
+			language,
+			plan: options.stt,
+			getSilences,
+			transcribeLocal,
+		});
+		const cues = filterHallucinatedCues(transcription.cues);
 
 		// Whisper cues run sentences together and don't break on pauses. Re-segment them
 		// into one caption per sentence/phrase using Whisper's own word stream (punctuation
@@ -306,11 +405,13 @@ async function generateCaptionsForSource(options: {
 		// Failure here must not block caption generation — fall back to raw.
 		let cuesToReturn = cues;
 		try {
-			const silences = await detectSilenceIntervals({ ffmpegPath, wavPath });
+			const silences = await getSilences();
 			// An empty result is a valid resegmentation (e.g. every transcribed word fell
 			// inside a long detected silence and was dropped as a hallucination), so take it
-			// as-is. Only a thrown exception should fall back to the raw cues.
-			cuesToReturn = segmentCuesIntoPhrases(cues, silences);
+			// as-is. Only a failure should fall back to the raw cues.
+			if (silences) {
+				cuesToReturn = segmentCuesIntoPhrases(cues, silences);
+			}
 		} catch (error) {
 			console.warn(
 				"[auto-captions] Silence-aware re-segmentation failed, using raw cues:",
@@ -321,6 +422,8 @@ async function generateCaptionsForSource(options: {
 		return {
 			cues: cuesToReturn,
 			audioSourceLabel: audioSource.label,
+			backend: transcription.backend,
+			fallbackToLocal: Boolean(transcription.fallback),
 		};
 	} finally {
 		await Promise.allSettled([
@@ -334,8 +437,10 @@ async function generateCaptionsForSource(options: {
 export async function generateAutoCaptionsFromVideo(options: {
 	videoPath: string;
 	whisperExecutablePath?: string;
-	whisperModelPath: string;
+	whisperModelPath?: string | null;
 	language?: string;
+	/** Transcription backend for this job; omitted = local whisper.cpp. */
+	stt?: SttJobPlan;
 }) {
 	const candidates = await resolveCaptionAudioCandidates(options.videoPath);
 	const microphone = candidates.filter((source) => source.label === "microphone audio sidecar");
@@ -350,18 +455,23 @@ export async function generateAutoCaptionsFromVideo(options: {
 	// sidecar replaces embedded system audio to avoid transcribing it twice.
 	const transcribeTrack = async (sources: CaptionAudioCandidate[]) => {
 		try {
-			return (await generateCaptionsForSource({ ...options, candidates: sources })).cues;
+			return await generateCaptionsForSource({ ...options, candidates: sources });
 		} catch (error) {
 			if (!(error instanceof NoCaptionAudioError)) throw error;
 			return null;
 		}
 	};
-	const micCues = await transcribeTrack(microphone);
-	const systemCues = await transcribeTrack([...system, ...secondary]);
-	if (micCues === null && systemCues === null)
+	const mic = await transcribeTrack(microphone);
+	const systemTrack = await transcribeTrack([...system, ...secondary]);
+	if (mic === null && systemTrack === null)
 		throw new NoCaptionAudioError("No audio could be extracted from the recording.");
+	const tracks = [mic, systemTrack].filter((track) => track !== null);
 	return {
-		cues: mergeCaptionSources(micCues ?? [], systemCues ?? []),
+		cues: mergeCaptionSources(mic?.cues ?? [], systemTrack?.cues ?? []),
 		audioSourceLabel: "microphone and system audio",
+		backend: tracks.some((track) => track.backend === "bridge")
+			? ("bridge" as const)
+			: ("local" as const),
+		fallbackToLocal: tracks.some((track) => track.fallbackToLocal),
 	};
 }

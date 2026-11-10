@@ -1,0 +1,17 @@
+# Bug reproduction: no narration, one marker per step, short GIF for the issue tracker.
+title: "Bug repro"
+language: en
+target:
+  window: { title: "REPLACE" }
+recorder: { countdown: 0, idle_seconds: 3, auto_edit: { speed_up_idle: true, target_seconds: 2, speed_badge: false } }
+tts: { provider: edge, lang: en }
+steps:
+  - id: step-1
+    title: "REPLACE: open the screen"
+    actions: [ { type: click, uia: { window: "REPLACE", name: "REPLACE" } } ]
+    wait: { type: stable, for_ms: 800, timeout_s: 10 }
+  - id: step-2
+    title: "REPLACE: trigger the bug"
+    actions: [ { type: click, uia: { window: "REPLACE", name: "REPLACE" } } ]
+    wait: { type: stable, for_ms: 1500, timeout_s: 10 }
+output: { project_name: "Bug repro", video: "REPLACE.gif", format: gif, subtitles: false }

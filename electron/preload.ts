@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { createAutomationPreloadApi } from "./automation/preloadApi";
+import { createSttPreloadApi } from "./automation/stt/preloadSttApi";
 import type { RecordingSessionData } from "./ipc/types";
 
 type NativeVideoExportWriteResult = { success: boolean; error?: string };
@@ -184,6 +186,8 @@ function settleNativeVideoExportPendingRequests(
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {
+	automation: createAutomationPreloadApi(ipcRenderer),
+	stt: createSttPreloadApi(ipcRenderer),
 	hudOverlaySetIgnoreMouse: (ignore: boolean) => {
 		ipcRenderer.send("hud-overlay-set-ignore-mouse", ignore);
 	},

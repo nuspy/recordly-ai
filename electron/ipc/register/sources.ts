@@ -166,6 +166,8 @@ export function registerSourceHandlers({
 			[
 				app.getName(),
 				"Recordly",
+				"Recordly AI",
+				"RecordlyAI",
 				...BrowserWindow.getAllWindows().flatMap((win) => {
 					const title = win.getTitle().trim();
 					return title ? [title] : [];

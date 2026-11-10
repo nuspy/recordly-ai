@@ -1,0 +1,30 @@
+# AI video generation: multi-minute renders, failed renders discarded and retried, result played with sound.
+title: "AI video generation demo"
+language: it
+target:
+  window: { title: "REPLACE" }
+recorder: { countdown: 0, system_audio: true, idle_seconds: 8, auto_edit: { speed_up_idle: true, target_seconds: 10, max_speed: 16, speed_badge: true } }
+tts: { provider: bridge, voice: if_sara, lang: it }
+steps:
+  - id: setup
+    chapter: "Impostazioni"
+    narration: "REPLACE: scegliamo modello, durata e formato."
+    narration_timing: with
+    actions: []
+    wait: { type: stable, for_ms: 1000, timeout_s: 15 }
+  - id: render
+    chapter: "Rendering"
+    narration: "Avviamo il rendering: qui l'attesa è di qualche minuto, la accelero."
+    actions:
+      - { type: click, uia: { window: "REPLACE", name: "REPLACE render button", control_type: "Button" }, zoom: true }
+      - { type: sleep, ms: 2000 }
+    wait: { type: idle_end, timeout_s: 1800, required: true }
+    retry: { max: 2, reset_actions: [ { type: hotkey, keys: "esc" } ] }
+  - id: playback
+    chapter: "Il video generato"
+    narration_timing: after
+    narration: "REPLACE: commento finale sul video."
+    actions:
+      - { type: click, uia: { window: "REPLACE", name: "REPLACE play", control_type: "Button" } }
+    wait: { type: sleep, ms: 8000 }
+output: { project_name: "AI video demo", video: "REPLACE.mp4", quality: high, subtitles: true }

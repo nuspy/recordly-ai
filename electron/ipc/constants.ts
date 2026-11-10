@@ -18,6 +18,9 @@ export const WHISPER_MODEL_DOWNLOAD_URL =
 	"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 export const WHISPER_MODEL_DIR = path.join(USER_DATA_PATH, "whisper");
 export const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, "ggml-small.bin");
+/** On-demand whisper.cpp runtimes (e.g. the CUDA build), never bundled with the app. */
+export const WHISPER_RUNTIME_DIR = path.join(USER_DATA_PATH, "whisper-runtime");
+export const WHISPER_CUDA_RUNTIME_DIR = path.join(WHISPER_RUNTIME_DIR, "cuda");
 export const COMPANION_AUDIO_LAYOUTS = [
 	{ platform: "mac" as const, systemSuffix: ".system.m4a", micSuffix: ".mic.m4a" },
 	{ platform: "win" as const, systemSuffix: ".system.wav", micSuffix: ".mic.wav" },

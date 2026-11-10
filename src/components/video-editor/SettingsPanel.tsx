@@ -32,6 +32,7 @@ import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import CaptionListPanel from "./CaptionListPanel";
+import { SttCaptionSettings } from "./captions/SttCaptionSettings";
 import type { CaptionRetimeSpan } from "./captionOps";
 import {
 	CURSOR_MOTION_PRESETS,
@@ -543,6 +544,7 @@ interface SettingsPanelProps {
 	onAutoCaptionSettingsChange?: (settings: AutoCaptionSettings) => void;
 	onPickWhisperExecutable?: () => void;
 	onPickWhisperModel?: () => void;
+	onUseWhisperModel?: (modelPath: string | null) => void;
 	onGenerateAutoCaptions?: () => void;
 	onClearAutoCaptions?: () => void;
 	onDownloadWhisperSmallModel?: () => void;
@@ -986,6 +988,7 @@ export function SettingsPanel({
 	isGeneratingCaptions = false,
 	onAutoCaptionSettingsChange,
 	onPickWhisperModel,
+	onUseWhisperModel,
 	onGenerateAutoCaptions,
 	onClearAutoCaptions,
 	onDownloadWhisperSmallModel,
@@ -1002,6 +1005,7 @@ export function SettingsPanel({
 	onOpenNativeCaptureUnavailableModal,
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
+	const [sttBridgeReady, setSttBridgeReady] = useState(false);
 	const { locale, setLocale, t } = useI18n();
 	const { preference: themePreference, setPreference: setThemePreference } = useTheme();
 	const isBackgroundPanel = panelMode === "background";
@@ -2009,6 +2013,12 @@ export function SettingsPanel({
 			</div>
 
 			<div className="py-2 space-y-3">
+				<SttCaptionSettings
+					whisperModelPath={whisperModelPath}
+					onUseWhisperModel={onUseWhisperModel}
+					isGeneratingCaptions={isGeneratingCaptions}
+					onBridgeReadyChange={setSttBridgeReady}
+				/>
 				{advanced && (
 					<div>
 						<Button
@@ -2105,7 +2115,7 @@ export function SettingsPanel({
 					<Button
 						type="button"
 						onClick={onGenerateAutoCaptions}
-						disabled={isGeneratingCaptions || !whisperModelPath}
+						disabled={isGeneratingCaptions || (!whisperModelPath && !sttBridgeReady)}
 						className="h-9 w-full px-4 text-sm"
 					>
 						{isGeneratingCaptions

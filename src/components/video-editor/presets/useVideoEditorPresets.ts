@@ -142,6 +142,9 @@ export function useVideoEditorPresets({
 		setPresetPopoverOpen,
 		presetNameDraft,
 		setPresetNameDraft,
+		currentSnapshot,
+		applySnapshot,
+		setEditorPresets,
 		...actions,
 	};
 }

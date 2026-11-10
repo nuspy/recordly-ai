@@ -559,4 +559,186 @@ async function main() {
 	}
 }
 
+// Optional (WHISPER_RUNTIME_CUDA=1, Windows x64 only): build whisper-cli with GGML_CUDA into
+// electron/native/bin/win32-x64-cuda. Needed for GPUs the official CUDA 12.4 release cannot
+// drive, e.g. RTX 50xx (Blackwell, sm_120) which requires CUDA >= 12.8. Recordly AI prefers
+// this build over the on-demand CUDA download when it is present.
+//
+// Uses Ninja inside a vcvars64 environment instead of the Visual Studio generator: it needs no
+// CUDA MSBuild integration, and it lets us pick an MSVC toolset nvcc accepts (CUDA 13.x only
+// supports MSVC up to 14.4x / VS 2022, even when VS 2026 is installed). Overrides:
+//   WHISPER_CUDA_ARCHITECTURES (default "89;120"), WHISPER_CUDA_VCVARS_VER (e.g. "14.44").
+function findVcvars64() {
+	const vswhere = path.join(
+		process.env["ProgramFiles(x86)"] ?? "C:\Program Files (x86)",
+		"Microsoft Visual Studio",
+		"Installer",
+		"vswhere.exe",
+	);
+	const roots = [];
+	if (existsSync(vswhere)) {
+		try {
+			const output = execFileSync(
+				vswhere,
+				["-all", "-products", "*", "-property", "installationPath"],
+				{ encoding: "utf8" },
+			);
+			roots.push(
+				...output
+					.split(/\r?\n/)
+					.map((line) => line.trim())
+					.filter(Boolean),
+			);
+		} catch {
+			// Fall back to the well-known locations below.
+		}
+	}
+	const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
+	for (const version of WINDOWS_VISUAL_STUDIO_INSTALL_DIRS) {
+		for (const edition of ["Community", "Professional", "Enterprise", "BuildTools"]) {
+			roots.push(path.join(programFiles, "Microsoft Visual Studio", version, edition));
+		}
+	}
+	for (const root of roots) {
+		const vcvars = path.join(root, "VC", "Auxiliary", "Build", "vcvars64.bat");
+		if (existsSync(vcvars)) return { root, vcvars };
+	}
+	return null;
+}
+
+async function pickCudaHostToolset(vsRoot) {
+	if (process.env.WHISPER_CUDA_VCVARS_VER?.trim())
+		return process.env.WHISPER_CUDA_VCVARS_VER.trim();
+	const toolsDir = path.join(vsRoot, "VC", "Tools", "MSVC");
+	if (!existsSync(toolsDir)) return null;
+	const versions = (await readdir(toolsDir))
+		.filter((name) => /^14\.\d+/.test(name))
+		.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+	// nvcc rejects MSVC 14.5x (VS 2026); the newest 14.4x toolset is the right host compiler.
+	const supported = versions.find((version) => Number(version.split(".")[1]) < 50);
+	return supported ? supported.split(".").slice(0, 2).join(".") : null;
+}
+
+function captureVcvarsEnvironment(vcvars, toolset) {
+	const call = `call "${vcvars}"${toolset ? ` -vcvars_ver=${toolset}` : ""} >nul && set`;
+	const output = execFileSync("cmd.exe", ["/d", "/s", "/c", call], {
+		encoding: "utf8",
+		windowsVerbatimArguments: true,
+		maxBuffer: 16 * 1024 * 1024,
+	});
+	const env = {};
+	for (const line of output.split(/\r?\n/)) {
+		const index = line.indexOf("=");
+		if (index > 0) env[line.slice(0, index)] = line.slice(index + 1);
+	}
+	// A global `_CL_=/std:c++20` (or CL) would also be applied to ggml's C sources and break them.
+	delete env._CL_;
+	delete env.CL;
+	return env;
+}
+
+async function buildWindowsCudaRuntime() {
+	if (process.platform !== "win32" || getHostArch() !== "x64") {
+		console.warn(
+			"[build-whisper-runtime] WHISPER_RUNTIME_CUDA=1 is only supported on Windows x64.",
+		);
+		return;
+	}
+
+	const cudaArchitectures = process.env.WHISPER_CUDA_ARCHITECTURES?.trim() || "89;120";
+	const target = {
+		platform: "win32",
+		arch: "x64",
+		archTag: "win32-x64-cuda",
+		buildRoot: path.join(cacheRoot, "build-win32-x64-cuda-ninja"),
+		outputDir: path.join(nativeRoot, "bin", "win32-x64-cuda"),
+	};
+
+	if (await shouldSkipBuild(target)) {
+		console.log(
+			`[build-whisper-runtime] CUDA whisper runtime ${whisperVersion} already staged in ${target.outputDir}.`,
+		);
+		return;
+	}
+
+	const cmake = findCmake();
+	if (!cmake) {
+		throw new Error("[build-whisper-runtime] CMake is required for WHISPER_RUNTIME_CUDA=1.");
+	}
+	const cudaRoot = process.env.CUDA_PATH?.trim();
+	if (!cudaRoot || !existsSync(path.join(cudaRoot, "bin", "nvcc.exe"))) {
+		throw new Error(
+			"[build-whisper-runtime] CUDA_PATH must point to a CUDA toolkit with nvcc.exe.",
+		);
+	}
+	const vs = findVcvars64();
+	if (!vs) {
+		throw new Error("[build-whisper-runtime] Visual Studio (vcvars64.bat) not found.");
+	}
+	const toolset = await pickCudaHostToolset(vs.root);
+	if (!toolset) {
+		console.warn(
+			"[build-whisper-runtime] No MSVC 14.4x toolset found; nvcc may reject the default one. Install 'MSVC v143 build tools' in the Visual Studio Installer.",
+		);
+	}
+	const env = captureVcvarsEnvironment(vs.vcvars, toolset);
+
+	const sourceDir = await ensureSourceTree();
+	await mkdir(target.buildRoot, { recursive: true });
+	console.log(
+		`[build-whisper-runtime] Configuring whisper.cpp ${whisperVersion} with CUDA (architectures ${cudaArchitectures}, MSVC ${toolset ?? "default"}, Ninja)...`,
+	);
+	execFileSync(
+		cmake,
+		[
+			"-S",
+			sourceDir,
+			"-B",
+			target.buildRoot,
+			"-G",
+			"Ninja",
+			"-DCMAKE_BUILD_TYPE=Release",
+			"-DWHISPER_BUILD_TESTS=OFF",
+			"-DWHISPER_BUILD_SERVER=OFF",
+			"-DBUILD_SHARED_LIBS=OFF",
+			"-DGGML_CUDA=1",
+			`-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures}`,
+			`-DCMAKE_CUDA_COMPILER=${path.join(cudaRoot, "bin", "nvcc.exe")}`,
+		],
+		{ stdio: "inherit", timeout: 600000, env },
+	);
+
+	console.log(
+		"[build-whisper-runtime] Building the CUDA whisper runtime (this takes a while)...",
+	);
+	execFileSync(
+		cmake,
+		["--build", target.buildRoot, "--config", "Release", "--target", "whisper-cli", "-j"],
+		{ stdio: "inherit", timeout: 3600000, env },
+	);
+
+	const binDir = path.join(target.buildRoot, "bin");
+	const runtimeEntries = (await readdir(binDir)).filter(
+		(entry) => entry === "whisper-cli.exe" || entry.toLowerCase().endsWith(".dll"),
+	);
+	await stageRuntimeArtifacts(target, binDir, runtimeEntries);
+
+	// whisper-cli links the CUDA runtime dynamically: ship the DLLs next to it.
+	for (const dllDir of [path.join(cudaRoot, "bin"), path.join(cudaRoot, "bin", "x64")]) {
+		if (!existsSync(dllDir)) continue;
+		for (const entry of await readdir(dllDir)) {
+			if (/^(cudart64|cublas64|cublasLt64)_\d+\.dll$/i.test(entry)) {
+				await cp(path.join(dllDir, entry), path.join(target.outputDir, entry), {
+					force: true,
+				});
+			}
+		}
+	}
+	console.log(`[build-whisper-runtime] Staged CUDA whisper runtime -> ${target.outputDir}`);
+}
+
 await main();
+
+if (process.env.WHISPER_RUNTIME_CUDA === "1") {
+	await buildWindowsCudaRuntime();
+}

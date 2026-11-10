@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 	companions: vi.fn(),
 	delay: vi.fn(),
 	session: vi.fn(),
+	bridgeTranscribe: vi.fn(),
 }));
 vi.mock("node:child_process", () => ({
 	execFile: (...args: unknown[]) => {
@@ -36,7 +37,12 @@ vi.mock("../recording/diagnostics", () => ({
 	getCompanionAudioStartDelayMs: mocks.delay,
 }));
 vi.mock("../utils", () => ({ normalizeVideoSourcePath: (value: string) => value }));
+vi.mock("../../automation/bridgeClient", () => ({
+	getBridgeSessionState: async () => ({ active: false }),
+	transcribeWithBridge: mocks.bridgeTranscribe,
+}));
 
+import { createSilentWav } from "../../automation/stt/wav";
 import { generateAutoCaptionsFromVideo } from "./generate";
 
 const options = { videoPath: "/video.mp4", whisperModelPath: "/model.bin" };
@@ -163,4 +169,43 @@ it("falls back to linked webcam audio when mic exists and other secondary source
 			([file, args]) => file === "/ffmpeg" && args.includes("/webcam.mp4"),
 		),
 	).toBe(true);
+});
+
+it("transcribes through a bridge plan without a local model or whisper.cpp", async () => {
+	mocks.readFile.mockImplementation(async (file: string) =>
+		file.endsWith(".wav") ? createSilentWav(5_000) : srt,
+	);
+	mocks.bridgeTranscribe.mockResolvedValue({
+		text: "Hello world.",
+		segments: [
+			{
+				start_s: 0.2,
+				end_s: 1.5,
+				text: "Hello world.",
+				words: [
+					{ start_s: 0.2, end_s: 0.7, text: " Hello" },
+					{ start_s: 0.8, end_s: 1.5, text: " world." },
+				],
+			},
+		],
+	});
+	const result = await generateAutoCaptionsFromVideo({
+		videoPath: "/video.mp4",
+		whisperModelPath: null,
+		language: "it",
+		stt: {
+			backend: "bridge",
+			strict: true,
+			bridge: { bridgeUrl: "http://b", bridgeControlUrl: "http://c", busyTimeoutMs: 1_000 },
+		},
+	});
+	expect(result.backend).toBe("bridge");
+	expect(result.cues[0].text).toBe("Hello world.");
+	expect(result.cues[0].words).toHaveLength(2);
+	expect(mocks.bridgeTranscribe).toHaveBeenCalledWith(
+		expect.objectContaining({ bridgeUrl: "http://b" }),
+		expect.any(Buffer),
+		{ language: "it" },
+	);
+	expect(mocks.exec.mock.calls.some(([file]) => file !== "/ffmpeg")).toBe(false);
 });

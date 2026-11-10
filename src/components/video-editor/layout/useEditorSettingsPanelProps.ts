@@ -197,6 +197,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onAutoCaptionSettingsChange: timeline.setAutoCaptionSettings,
 		onPickWhisperExecutable: autoCaptionController.handlePickWhisperExecutable,
 		onPickWhisperModel: autoCaptionController.handlePickWhisperModel,
+		onUseWhisperModel: autoCaptionController.handleUseWhisperModel,
 		onGenerateAutoCaptions: autoCaptionController.handleGenerateAutoCaptions,
 		onClearAutoCaptions: captionCommands.handleClearAutoCaptions,
 		captionCurrentTimeMs: mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions),

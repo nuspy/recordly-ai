@@ -1,5 +1,10 @@
 import path from "node:path";
 import { dialog, ipcMain } from "electron";
+import {
+	registerSttIpcHandlers,
+	sendSttCaptionJobProgress,
+} from "../../automation/stt/ipcHandlers";
+import { createSttJobPlan } from "../../automation/stt/service";
 import { generateAutoCaptionsFromVideo } from "../captions/generate";
 import {
 	deleteWhisperSmallModel,
@@ -20,18 +25,20 @@ type OpenVideoFilePickerOptions = {
 };
 
 export function registerCaptionHandlers() {
+	registerSttIpcHandlers();
+
 	ipcMain.handle("open-video-file-picker", async (_, options?: OpenVideoFilePickerOptions) => {
 		try {
 			const includeProjects = Boolean(options?.includeProjects);
 			const recordingsDir = await getRecordingsDir();
 			const result = await dialog.showOpenDialog({
-				title: includeProjects ? "Import Media or Recordly Project" : "Select Video File",
+				title: includeProjects ? "Import Media or Recordly AI Project" : "Select Video File",
 				defaultPath: recordingsDir,
 				filters: [
 					...(includeProjects
 						? [
 								{
-									name: "Media or Recordly Projects",
+									name: "Media or Recordly AI Projects",
 									extensions: [
 										...VIDEO_FILE_EXTENSIONS,
 										...PROJECT_FILE_EXTENSIONS,
@@ -41,7 +48,7 @@ export function registerCaptionHandlers() {
 						: []),
 					{ name: "Video Files", extensions: VIDEO_FILE_EXTENSIONS },
 					...(includeProjects
-						? [{ name: "Recordly Projects", extensions: PROJECT_FILE_EXTENSIONS }]
+						? [{ name: "Recordly AI Projects", extensions: PROJECT_FILE_EXTENSIONS }]
 						: []),
 					{ name: "All Files", extensions: ["*"] },
 				],
@@ -224,23 +231,38 @@ export function registerCaptionHandlers() {
 	ipcMain.handle(
 		"generate-auto-captions",
 		async (
-			_,
+			event,
 			options: {
 				videoPath: string;
 				whisperExecutablePath: string;
-				whisperModelPath: string;
+				whisperModelPath?: string | null;
 				language?: string;
 			},
 		) => {
 			try {
-				const result = await generateAutoCaptionsFromVideo(options);
+				const stt = await createSttJobPlan({
+					whisperModelPath: options.whisperModelPath,
+					whisperExecutablePath: options.whisperExecutablePath,
+					onProgress: (progress) => sendSttCaptionJobProgress(event.sender, progress),
+				});
+				const result = await generateAutoCaptionsFromVideo({ ...options, stt });
+				const backendNote =
+					result.backend === "bridge"
+						? result.fallbackToLocal
+							? " (CallAPICall, finished with local Whisper)"
+							: " (CallAPICall)"
+						: result.fallbackToLocal
+							? " (local Whisper: CallAPICall was busy)"
+							: "";
 				return {
 					success: true,
 					cues: result.cues,
+					backend: result.backend,
+					fallbackToLocal: result.fallbackToLocal,
 					message:
 						result.audioSourceLabel === "recording"
-							? `Generated ${result.cues.length} caption cues.`
-							: `Generated ${result.cues.length} caption cues from the ${result.audioSourceLabel}.`,
+							? `Generated ${result.cues.length} caption cues${backendNote}.`
+							: `Generated ${result.cues.length} caption cues from the ${result.audioSourceLabel}${backendNote}.`,
 				};
 			} catch (error) {
 				console.error("Failed to generate auto captions:", error);

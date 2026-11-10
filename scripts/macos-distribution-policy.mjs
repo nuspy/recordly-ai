@@ -49,7 +49,7 @@ export function collectCodeSigningMetadataErrors(details, expectedTeamId) {
 	const timestamp = readCodeSignValue(details, "Timestamp");
 	const codeDirectory = details.split(/\r?\n/).find((line) => line.startsWith("CodeDirectory "));
 
-	if (identifier !== "dev.recordly.app") {
+	if (identifier !== "dev.recordly.ai") {
 		errors.push(`unexpected bundle identifier: ${identifier ?? "missing"}`);
 	}
 

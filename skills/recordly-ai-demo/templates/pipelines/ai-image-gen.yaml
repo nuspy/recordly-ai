@@ -1,0 +1,37 @@
+# AI image generator demo: prompt -> generation (long wait, accelerated) -> result -> variation.
+title: "AI image generation demo"
+language: it
+target:
+  window: { title: "REPLACE: window title regex of the image app" }
+recorder: { countdown: 0, idle_seconds: 6, auto_edit: { speed_up_idle: true, target_seconds: 8, speed_badge: true } }
+idle_ignore_rects: []            # add the spinner / progress counter area (normalized) found in recon
+tts: { provider: bridge, voice: if_sara, lang: it }
+steps:
+  - id: intro
+    chapter: "Introduzione"
+    narration: "REPLACE: perché questo strumento è utile, in una frase."
+  - id: prompt
+    chapter: "Il prompt"
+    narration: "REPLACE: cosa scriviamo e perché."
+    narration_timing: with
+    actions:
+      - { type: click, uia: { window: "REPLACE", name: "REPLACE prompt box", control_type: "Edit" }, zoom: true }
+      - { type: type, text: "REPLACE prompt", interval_ms: 30 }
+    wait: { type: stable, for_ms: 800, timeout_s: 10 }
+  - id: generate
+    chapter: "Generazione"
+    narration: "Avviamo la generazione."
+    actions:
+      - { type: click, uia: { window: "REPLACE", name: "REPLACE generate button", control_type: "Button" }, zoom: true }
+    while_waiting: { after_ms: 3000, narration: "REPLACE: cosa succede mentre il modello lavora." }
+    wait: { type: idle_end, timeout_s: 600, required: true }
+    retry: { max: 1, reset_actions: [] }
+  - id: result
+    chapter: "Il risultato"
+    narration: "REPLACE: commento sul risultato."
+    actions:
+      - { type: zoom_on, rect: { x: 0.25, y: 0.15, width: 0.5, height: 0.6 }, duration_ms: 4000 }
+    hold_ms: 2500
+  - id: outro
+    narration: "REPLACE: call to action."
+output: { project_name: "AI image demo", video: "REPLACE.mp4", quality: high, subtitles: true, quit: false }

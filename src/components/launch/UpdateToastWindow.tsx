@@ -61,7 +61,7 @@ function getDetail(payload: UpdateToastPayload, t: Translate) {
 	if (payload.phase === "available" && payload.isExperimental) {
 		return t(
 			"launch.updateToast.experimentalDescription",
-			"You've opted into experimental updates so you have the choice to test the latest update of Recordly before it's widely available.",
+			"You've opted into experimental updates so you have the choice to test the latest update of Recordly AI before it's widely available.",
 		);
 	}
 
@@ -158,7 +158,7 @@ export function UpdateToastWindow({
 
 	return (
 		<div className={`${styles.window} launch-theme`}>
-			<Card className="w-full flex-row gap-3" aria-live="polite" aria-label="Recordly update">
+			<Card className="w-full flex-row gap-3" aria-live="polite" aria-label="Recordly AI update">
 				<div
 					className={`${styles.icon} ${payload.phase === "error" ? styles.iconError : ""}`}
 				>

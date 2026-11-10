@@ -49,3 +49,9 @@ gpu-export-probe.mp4
 # Browser test output
 test-results/
 playwright-report/
+
+# Recordly AI: locally built CUDA whisper runtime (hundreds of MB of NVIDIA DLLs)
+electron/native/bin/win32-x64-cuda/
+electron/native/bin/*/ggml*.dll
+electron/native/bin/*/whisper.dll
+electron/native/bin/*/SDL2.dll

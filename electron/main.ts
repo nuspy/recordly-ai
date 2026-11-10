@@ -19,6 +19,13 @@ import {
 } from "electron";
 import { RECORDINGS_DIR } from "./appPaths";
 import { createAuthCallbackController } from "./authCallback";
+import { RECORDLY_AI_APP_ID } from "./automation/fork";
+import {
+	handleSecondInstanceArgs,
+	prepareAutomation,
+	reportRunningServer,
+	startAutomation,
+} from "./automation";
 import { showCursor } from "./cursorHider";
 import { getGpuSwitches } from "./gpuSwitches";
 import {
@@ -143,6 +150,7 @@ export const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 export const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 const IS_DEV = Boolean(VITE_DEV_SERVER_URL);
+const AUTOMATION_LAUNCH = prepareAutomation(process.argv);
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 	? path.join(process.env.APP_ROOT, "public")
@@ -189,6 +197,7 @@ const hasSingleInstanceLock = shouldEnforceSingleInstanceLock
 	: true;
 
 if (!hasSingleInstanceLock) {
+	if (AUTOMATION_LAUNCH.server) reportRunningServer(app.getPath("userData"));
 	app.quit();
 }
 
@@ -716,7 +725,7 @@ ipcMain.handle("check-for-app-updates", async () => {
 function updateTrayMenu(recording: boolean = false) {
 	if (!tray) return;
 	const trayIcon = recording ? getRecordingTrayIcon() : getDefaultTrayIcon();
-	const trayToolTip = recording ? `Recording: ${selectedSourceName}` : "Recordly";
+	const trayToolTip = recording ? `Recording: ${selectedSourceName}` : "Recordly AI";
 	const menuTemplate = recording
 		? [
 				{
@@ -901,7 +910,9 @@ app.on("activate", () => {
 app.on("second-instance", (_event, commandLine) => {
 	const authCallback = authCallbacks.find(commandLine);
 	if (authCallback) authCallbacks.dispatch(authCallback);
-	focusOrCreateMainWindow();
+	void handleSecondInstanceArgs(commandLine).then((handledByAutomation) => {
+		if (!handledByAutomation && !AUTOMATION_LAUNCH.server) focusOrCreateMainWindow();
+	});
 });
 
 // Register all IPC handlers when app is ready
@@ -918,7 +929,7 @@ app.whenReady().then(async () => {
 	if (startupAuthCallback) authCallbacks.dispatch(startupAuthCallback);
 
 	if (process.platform === "win32") {
-		app.setAppUserModelId("dev.recordly.app");
+		app.setAppUserModelId(RECORDLY_AI_APP_ID);
 	}
 
 	session.defaultSession.setPermissionCheckHandler(
@@ -1061,8 +1072,40 @@ app.whenReady().then(async () => {
 		return;
 	}
 
+	await startAutomation({
+		launch: AUTOMATION_LAUNCH,
+		userDataPath: app.getPath("userData"),
+		appVersion: app.getVersion(),
+		openEditorWindow: () => {
+			createEditorWindowWrapper();
+		},
+		// Upstream closes the HUD after each recording and recreates it when the editor
+		// closes; agents need it back while the editor stays open (next take, waits).
+		ensureHudWindow: () => {
+			if (getHudOverlayWindow()) return;
+			if (!mainWindow || mainWindow.isDestroyed()) {
+				createWindow();
+				return;
+			}
+			createHudOverlayWindow();
+		},
+		quit: (force) => {
+			if (force) {
+				isAppQuitting = true;
+				isForceClosing = true;
+				killWindowsCaptureProcess();
+				showCursor();
+				app.exit(0);
+				return;
+			}
+			app.quit();
+		},
+	});
+
 	createWindow();
-	setupAutoUpdates(getUpdateDialogWindow, sendUpdateToastToWindows);
+	if (!AUTOMATION_LAUNCH.server) {
+		setupAutoUpdates(getUpdateDialogWindow, sendUpdateToastToWindows);
+	}
 	if (IS_DEV && process.env.RECORDLY_DEV_PREVIEW_UPDATE === "1") {
 		setTimeout(() => {
 			if (process.platform === "darwin") {

@@ -5,6 +5,7 @@ import { type CaptionEditTarget, updateCaptionCuesForEditedTarget } from "../cap
 import { resolveVideoUrl } from "../projectPersistence";
 import type { AutoCaptionSettings, CaptionCue } from "../types";
 import { getErrorMessage } from "../videoEditorUtils";
+import { getSttApi } from "./sttApi";
 
 type DownloadStatus = "idle" | "downloading" | "downloaded" | "error";
 type Translator = (
@@ -161,8 +162,17 @@ export function useAutoCaptionController({
 		setIsGeneratingCaptions(true);
 		try {
 			if (!whisperModelPath) {
-				toast.error("Select a Whisper model or download the small model first");
-				return;
+				// CallAPICall's already-loaded Whisper needs no local model.
+				const resolved = await getSttApi()
+					?.resolveBackend()
+					.catch(() => null);
+				if (resolved?.backend !== "bridge") {
+					toast.error(
+						resolved?.error ||
+							"Select a Whisper model or download the small model first",
+					);
+					return;
+				}
 			}
 			let sourcePath = resolveAutoCaptionSourcePath({ videoSourcePath, videoPath });
 			if (!sourcePath) {
@@ -191,7 +201,7 @@ export function useAutoCaptionController({
 			const result = await window.electronAPI.generateAutoCaptions({
 				videoPath: sourcePath,
 				whisperExecutablePath: whisperExecutablePath ?? undefined,
-				whisperModelPath,
+				whisperModelPath: whisperModelPath ?? "",
 				language: autoCaptionSettings.language,
 			});
 			if (resolveAutoCaptionSourcePath(activeSourceRef.current) !== sourcePath) {
@@ -230,6 +240,13 @@ export function useAutoCaptionController({
 		whisperModelPath,
 	]);
 
+	const handleUseWhisperModel = useCallback(
+		(modelPath: string | null) => {
+			setWhisperModelPath(modelPath);
+		},
+		[setWhisperModelPath],
+	);
+
 	const handleSaveAutoCaptionEdit = useCallback(
 		(target: CaptionEditTarget, text: string) => {
 			setAutoCaptions((captions) => updateCaptionCuesForEditedTarget(captions, target, text));
@@ -245,5 +262,6 @@ export function useAutoCaptionController({
 		handleDeleteWhisperSmallModel,
 		handleGenerateAutoCaptions,
 		handleSaveAutoCaptionEdit,
+		handleUseWhisperModel,
 	};
 }

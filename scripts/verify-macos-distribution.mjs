@@ -28,7 +28,7 @@ import {
 const projectRoot = process.cwd();
 const packageJson = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 const productName = packageJson.productName ?? packageJson.name ?? "Recordly";
-const expectedBundleId = "dev.recordly.app";
+const expectedBundleId = "dev.recordly.ai";
 const commandTimeoutMs = 5 * 60 * 1000;
 const maxReportDetailLength = 4_000;
 

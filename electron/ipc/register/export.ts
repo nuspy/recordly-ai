@@ -46,6 +46,7 @@ import {
 } from "../nativeVideoExport";
 import { isAllowedLocalReadPath, resolveApprovedLocalMediaPath } from "../project/manager";
 import { approveUserPath } from "../utils";
+import { takeAutomationExportPath } from "../../automation/exportTargets";
 import {
 	type CaptionSidecarPayload,
 	parseCaptionSidecarPayload,
@@ -997,8 +998,9 @@ export function registerExportHandlers() {
 
 			try {
 				const sidecarPayload = parseCaptionSidecarPayload(payload.captionSidecar);
-				if (payload.outputPath) {
-					const resolvedPath = path.resolve(payload.outputPath);
+				const outputPath = payload.outputPath ?? takeAutomationExportPath(event.sender);
+				if (outputPath) {
+					const resolvedPath = path.resolve(outputPath);
 					await moveExportedTempFile(tempPath, resolvedPath);
 					releaseOwnedExportPath(tempPath);
 					const captionSidecarResult = await writeCaptionSidecarsBestEffort(

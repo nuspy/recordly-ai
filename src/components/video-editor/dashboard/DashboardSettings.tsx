@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { supportsHudCaptureProtection } from "@/lib/hudCaptureProtection";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
+import { AutomationSettingsPanel } from "@/automation/settings/AutomationSettingsPanel";
 export const DashboardSettingsContext = createContext<ReactNode>(null);
 export function DashboardSettings({ onImportFile }: { onImportFile: () => Promise<void> }) {
 	const settingsContent = useContext(DashboardSettingsContext);
@@ -44,7 +45,9 @@ export function DashboardSettings({ onImportFile }: { onImportFile: () => Promis
 	return (
 		<section aria-label="Dashboard settings" className="dashboard-settings max-w-2xl py-10">
 			<h1 className="mb-8 text-lg font-semibold">Settings</h1>
-			<SettingsSections categories={["general", "motion", "recording", "files", "advanced"]}>
+			<SettingsSections
+				categories={["general", "motion", "recording", "files", "automation", "advanced"]}
+			>
 				<SettingsCategory category={["general", "motion", "advanced"]}>
 					{settingsContent}
 				</SettingsCategory>
@@ -110,6 +113,9 @@ export function DashboardSettings({ onImportFile }: { onImportFile: () => Promis
 							/>
 						</SettingsRow>
 					)}
+				</SettingsCategory>
+				<SettingsCategory category="automation">
+					<AutomationSettingsPanel />
 				</SettingsCategory>
 				<SettingsCategory category="advanced">
 					{import.meta.env.DEV && (

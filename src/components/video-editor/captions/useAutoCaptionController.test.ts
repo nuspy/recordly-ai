@@ -74,6 +74,34 @@ it("discards results after switching recordings", async () => {
 	expect(test.params.setAutoCaptions).not.toHaveBeenCalled();
 	expect(test.params.setIsGeneratingCaptions).toHaveBeenLastCalledWith(false);
 });
+it("generates without a local model when the backend resolves to the CallAPICall bridge", async () => {
+	const test = setup();
+	const resolveBackend = vi.fn(async () => ({ success: true, backend: "bridge" }));
+	vi.stubGlobal("window", {
+		electronAPI: { generateAutoCaptions: test.generateAutoCaptions, stt: { resolveBackend } },
+	});
+	test.params.whisperModelPath = null;
+	const pending = test.render().handleGenerateAutoCaptions();
+	await vi.waitFor(() => expect(test.generateAutoCaptions).toHaveBeenCalledTimes(1));
+	expect(test.generateAutoCaptions).toHaveBeenCalledWith(
+		expect.objectContaining({ whisperModelPath: "" }),
+	);
+	test.complete({ success: true, cues, backend: "bridge" });
+	await pending;
+	expect(test.params.setAutoCaptions).toHaveBeenCalledWith(cues);
+});
+it("still requires a model when the backend resolves to local whisper.cpp", async () => {
+	const test = setup();
+	const resolveBackend = vi.fn(async () => ({ success: true, backend: "local" }));
+	vi.stubGlobal("window", {
+		electronAPI: { generateAutoCaptions: test.generateAutoCaptions, stt: { resolveBackend } },
+	});
+	test.params.whisperModelPath = null;
+	await test.render().handleGenerateAutoCaptions();
+	expect(resolveBackend).toHaveBeenCalledOnce();
+	expect(test.generateAutoCaptions).not.toHaveBeenCalled();
+	expect(test.params.setIsGeneratingCaptions).toHaveBeenLastCalledWith(false);
+});
 it("preserves existing captions on failure and permits retry", async () => {
 	const test = setup();
 	const controller = test.render();
